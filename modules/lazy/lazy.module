@@ -1,0 +1,98 @@
+<?php
+
+/**
+ * @file
+ * Module file for Lazy-load.
+ */
+
+use Drupal\Core\Routing\RouteMatchInterface;
+
+/**
+ * Implements hook_help().
+ */
+function lazy_help($route_name, RouteMatchInterface $route_match) {
+  switch ($route_name) {
+    case 'help.page.lazy':
+      $readme = file_get_contents(dirname(__FILE__) . '/README.md');
+
+      if (\Drupal::moduleHandler()->moduleExists('markdown')) {
+        // Use the Markdown filter to render the README.
+        $filter_manager = \Drupal::service('plugin.manager.filter');
+        $settings = \Drupal::configFactory()->get('markdown.settings')->getRawData();
+        $config = ['settings' => $settings];
+        $filter = $filter_manager->createInstance('markdown', $config);
+        return $filter->process($readme, 'en');
+      }
+      else {
+        return '<pre>' . $readme . '</pre>';
+      }
+  }
+
+  return NULL;
+}
+
+/**
+ * Implements hook_preprocess_image().
+ */
+function lazy_preprocess_image(&$variables) {
+  $config = \Drupal::config('lazy.settings');
+
+  if ($config->get('image_fields')) {
+    $variables['attributes'][$config->get('src')] = $variables['attributes']['src'];
+    $variables['attributes']['src'] = $config->get('placeholderSrc');
+    $variables['attributes']['class'][] = $config->get('selector');
+  }
+}
+
+/**
+ * Implements hook_page_attachments().
+ */
+function lazy_page_attachments(array &$attachments) {
+  $enabled = lazy_is_enabled();
+  if ($enabled) {
+    $config = \Drupal::config('lazy.settings');
+    $options = [
+      'errorClass' => $config->get('errorClass'),
+      'loadInvisible' => boolval($config->get('loadInvisible')),
+      'offset' => intval($config->get('offset')),
+      'saveViewportOffsetDelay' => $config->get('saveViewportOffsetDelay'),
+      'selector' => '.' . $config->get('selector'),
+      'skipClass' => $config->get('skipClass'),
+      'src' => $config->get('src'),
+      'successClass' => $config->get('successClass'),
+      'validateDelay' => $config->get('validateDelay'),
+      'placeholderSrc' => $config->get('placeholderSrc'),
+    ];
+    $attachments['#attached']['library'][] = 'lazy/lazy';
+    $attachments['#attached']['drupalSettings']['lazy'] = $options;
+  }
+}
+
+/**
+ * Callback function to check whether lazy is enabled in any text-formats.
+ */
+function lazy_is_enabled() {
+  $status = [];
+  $connection = \Drupal::database();
+  $query = $connection->query('SELECT c.name, c.data FROM {config} c WHERE c.name LIKE :format', [
+    ':format' => 'filter.format.%',
+  ]);
+  $filters = $query->fetchAllKeyed();
+  foreach ($filters as $key => $filter) {
+    $filter = unserialize($filter);
+    if (
+      isset($filter['status']) && $filter['status']
+      && isset($filter['dependencies']['module'])
+      && in_array('lazy', $filter['dependencies']['module'])
+    ) {
+      $status[$key] = TRUE;
+    }
+  }
+
+  $config = \Drupal::config('lazy.settings');
+  if ($config->get('image_fields')) {
+    $status['fields'] = TRUE;
+  }
+
+  return count($status) ? TRUE : FALSE;
+}

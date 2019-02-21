@@ -1,0 +1,8 @@
+name: Custom functions
+description: Custom functions for wellbeing.
+# core: 8.x
+type: module
+
+# Information added by Drupal.org packaging script on 2018-02-24
+core: '8.x'
+project: 'customfunctions'
